@@ -1,0 +1,271 @@
+﻿@page "/"
+@inherits ComponentBase
+@rendermode InteractiveServer
+
+
+<TabPage>
+    <Tab Title="Search & Catch">
+        <div class="search-section">
+            <input type="text" @bind="searchQuery" placeholder="Enter Pokemon name">
+            <button @onclick="SearchPokemon">Search</button>
+            <button @onclick="GetRandomPokemon">Random Pokemon</button>
+        </div>
+        
+        @if (pokemon != null)
+        {
+            <div class="pokemon-details">
+                <h3>@pokemon.Name</h3>
+                <p>Type: @string.Join(", ", pokemon.Types?.Select(t => t?.TypeDetail?.Name))</p>
+                <p>Weight: @pokemon.Weight</p>
+                <p>Height: @pokemon.Height</p>
+                <p>Stats:</p>
+                <ul>
+                    @if (pokemon.Stats != null)
+                    {
+                        @foreach (var stat in pokemon.Stats)
+                        {
+                            <li>@stat?.StatDetail?.Name: @stat?.BaseStat</li>
+                        }
+                    }
+                </ul>
+                <img src="@pokemon.Sprites?.BackDefault" alt="@pokemon.Name" />
+                <button @onclick="CatchPokemon">Catch</button>
+            </div>
+        }
+        
+        @if (!string.IsNullOrEmpty(catchAttemptMessage))
+        {
+            <div class="catch-attempt-message">
+                @catchAttemptMessage
+            </div>
+        }
+    </Tab>
+    
+    <Tab Title="Pokédex">
+        <h3>Pokédex</h3>
+        
+        <div class="pokemon-list">
+            @if (capturedPokemons != null && capturedPokemons.Any())
+            {
+                @foreach (var pokemon in capturedPokemons)
+                {
+                    <div class="pokemon-item">
+                        <h4>@pokemon.Name</h4>
+                        <p>Captured: @pokemon.CapturedCount times</p>
+                        <img src="@pokemon.ImageUrl" alt="@pokemon.Name" />
+                    </div>
+                }
+            }
+            else
+            {
+                <p>No captured Pokémons yet.</p>
+            }
+        </div>
+        
+        <button @onclick="ClearCapturedPokemons">Clear Pokédex</button>
+    </Tab>
+</TabPage>
+
+
+
+@code {
+    private string searchQuery;
+    private PokemonApiResponse pokemon;
+    private string catchAttemptMessage;
+    private List<CapturedPokemon> capturedPokemons = new List<CapturedPokemon>();
+    [Inject]
+    private HttpClient httpClient { get; set; }
+
+    private async Task SearchPokemon()
+    {
+        var result = await FetchPokemonAsync(searchQuery);
+        if (result != null)
+        {
+            pokemon = result;
+        }
+        else
+        {
+            // Handle error or display not found message
+        }
+    }
+
+    private async Task GetRandomPokemon()
+    {
+        var randomId = new Random().Next(1, 152); // Generating a random ID within the range of available Pokemons
+        var result = await FetchPokemonAsync(randomId.ToString());
+        if (result != null)
+        {
+            pokemon = result;
+        }
+        else
+        {
+            // Handle error or display not found message
+        }
+    }
+
+    private async Task<PokemonApiResponse> FetchPokemonAsync(string query)
+    {
+        try
+        {
+            var response = await httpClient.GetAsync($"https://pokeapi.co/api/v2/pokemon/{query.ToLower()}");
+            response.EnsureSuccessStatusCode(); // Throw exception if not successful
+            return await response.Content.ReadFromJsonAsync<PokemonApiResponse>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching Pokemon: {ex.Message}");
+            return null;
+        }
+    }
+
+    private async Task CatchPokemon()
+    {
+        if (pokemon != null)
+        {
+            // Check if the Pokemon is already captured
+            var capturedPokemon = capturedPokemons.FirstOrDefault(cp => cp.Name == pokemon.Name);
+            if (capturedPokemon != null)
+            {
+                // If already captured, increment the capture count
+                capturedPokemon.CapturedCount++;
+            }
+            else
+            {
+                // If not captured yet, add it to the capturedPokemons list
+                capturedPokemons.Add(new CapturedPokemon
+                    {
+                        Name = pokemon.Name,
+                        CapturedCount = 1, // Set the initial capture count to 1
+                        ImageUrl = pokemon.Sprites.BackDefault // Assuming you want to use the back sprite for the Pokédex
+                                                               // You can add more properties as needed
+                    });
+            }
+
+            // Display the catch attempt message
+            catchAttemptMessage = $"You caught {pokemon.Name}!";
+        }
+        else
+        {
+            catchAttemptMessage = "No Pokemon to catch.";
+        }
+    }
+
+    private void ClearCapturedPokemons()
+    {
+        // Clear the list of captured Pokémons
+        capturedPokemons.Clear();
+    }
+
+    public class CapturedPokemon
+    {
+        public string Name { get; set; }
+        public string ImageUrl { get; set; }
+        public int CapturedCount { get; set; }
+        // Add more properties as needed
+    }
+
+    public class PokemonApiResponse
+    {
+        public List<Ability> Abilities { get; set; }
+        public int BaseExperience { get; set; }
+        public Cries Cries { get; set; }
+        public List<Form> Forms { get; set; }
+        public int Height { get; set; }
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public int Order { get; set; }
+        public List<Item> HeldItems { get; set; }
+        public List<Stat> Stats { get; set; }
+        public List<Type> Types { get; set; }
+        public int Weight { get; set; }
+        public Sprites Sprites { get; set; }
+        public Species Species { get; set; }
+    }
+
+    public class Ability
+    {
+        public AbilityDetail AbilityDetail { get; set; }
+        public bool IsHidden { get; set; }
+        public int Slot { get; set; }
+    }
+
+    public class AbilityDetail
+    {
+        public string Name { get; set; }
+        public string Url { get; set; }
+    }
+
+    public class Cries
+    {
+        public string Latest { get; set; }
+        public string Legacy { get; set; }
+    }
+
+    public class Form
+    {
+        public string Name { get; set; }
+        public string Url { get; set; }
+    }
+
+    public class Item
+    {
+        public ItemDetail ItemDetail { get; set; }
+        public List<VersionDetail> VersionDetails { get; set; }
+    }
+
+    public class ItemDetail
+    {
+        public string Name { get; set; }
+        public string Url { get; set; }
+    }
+
+    public class VersionDetail
+    {
+        public int Rarity { get; set; }
+        public Version Version { get; set; }
+    }
+
+    public class Version
+    {
+        public string Name { get; set; }
+        public string Url { get; set; }
+    }
+
+    public class Stat
+    {
+        public int BaseStat { get; set; }
+        public int Effort { get; set; }
+        public StatDetail StatDetail { get; set; }
+    }
+
+    public class StatDetail
+    {
+        public string Name { get; set; }
+        public string Url { get; set; }
+    }
+
+    public class Type
+    {
+        public int Slot { get; set; }
+        public TypeDetail TypeDetail { get; set; }
+    }
+
+    public class TypeDetail
+    {
+        public string Name { get; set; }
+        public string Url { get; set; }
+    }
+
+    public class Sprites
+    {
+        public string BackDefault { get; set; }
+        // Add other sprite properties as needed
+    }
+
+    public class Species
+    {
+        public string Name { get; set; }
+        public string Url { get; set; }
+    }
+
+}
